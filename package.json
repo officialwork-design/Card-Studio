@@ -1,0 +1,25 @@
+{
+  "name": "card-studio",
+  "version": "0.1.0",
+  "description": "Internal business card editor. Browser-based editing, no server-side file storage, instant PNG/SVG/PDF download.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "business-card",
+    "fabricjs",
+    "express",
+    "pdf"
+  ],
+  "author": "officialwork-design",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.1.0",
+    "pdf-lib": "^1.17.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
