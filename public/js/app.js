@@ -2,6 +2,8 @@ const PROJECT_KEY = "card-studio-project-v1";
 const CARD_WIDTH = 1075;
 const CARD_HEIGHT = 650;
 const EXPORT_SCALE = 2;
+const SNAP_SIZE = 10;
+const MAX_HISTORY = 50;
 
 let currentSide = "front";
 let projectState = {
@@ -9,6 +11,9 @@ let projectState = {
   back: null
 };
 let isLoadingSide = false;
+let isApplyingHistory = false;
+let historyStack = [];
+let redoStack = [];
 
 const canvas = new fabric.Canvas("cardCanvas", {
   width: CARD_WIDTH,
@@ -20,6 +25,8 @@ const canvas = new fabric.Canvas("cardCanvas", {
 
 const elements = {
   alertArea: document.getElementById("alertArea"),
+  undoBtn: document.getElementById("undoBtn"),
+  redoBtn: document.getElementById("redoBtn"),
   saveLocalBtn: document.getElementById("saveLocalBtn"),
   exportJsonBtn: document.getElementById("exportJsonBtn"),
   importJsonInput: document.getElementById("importJsonInput"),
@@ -41,6 +48,7 @@ const elements = {
   frontSideBtn: document.getElementById("frontSideBtn"),
   backSideBtn: document.getElementById("backSideBtn"),
   gridToggle: document.getElementById("gridToggle"),
+  snapToggle: document.getElementById("snapToggle"),
   canvasWrapper: document.getElementById("canvasWrapper"),
   noSelectionText: document.getElementById("noSelectionText"),
   propertyPanel: document.getElementById("propertyPanel"),
@@ -51,8 +59,16 @@ const elements = {
   boldBtn: document.getElementById("boldBtn"),
   italicBtn: document.getElementById("italicBtn"),
   underlineBtn: document.getElementById("underlineBtn"),
+  alignLeftBtn: document.getElementById("alignLeftBtn"),
+  alignCenterBtn: document.getElementById("alignCenterBtn"),
+  alignRightBtn: document.getElementById("alignRightBtn"),
+  alignTopBtn: document.getElementById("alignTopBtn"),
+  alignMiddleBtn: document.getElementById("alignMiddleBtn"),
+  alignBottomBtn: document.getElementById("alignBottomBtn"),
   bringForwardBtn: document.getElementById("bringForwardBtn"),
   sendBackwardBtn: document.getElementById("sendBackwardBtn"),
+  bringToFrontBtn: document.getElementById("bringToFrontBtn"),
+  sendToBackBtn: document.getElementById("sendToBackBtn"),
   duplicateBtn: document.getElementById("duplicateBtn"),
   deleteBtn: document.getElementById("deleteBtn"),
   frontPreviewImage: document.getElementById("frontPreviewImage"),
@@ -80,9 +96,64 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function captureCurrentSide() {
-  if (isLoadingSide) return;
+function captureCurrentSide(options = {}) {
+  if (isLoadingSide || isApplyingHistory) return;
   projectState[currentSide] = canvas.toJSON(["name"]);
+  if (options.skipHistory !== true) {
+    pushHistory();
+  }
+}
+
+function pushHistory() {
+  const snapshot = JSON.stringify(canvas.toJSON(["name"]));
+  if (historyStack[historyStack.length - 1] === snapshot) return;
+  historyStack.push(snapshot);
+  if (historyStack.length > MAX_HISTORY) historyStack.shift();
+  redoStack = [];
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  elements.undoBtn.disabled = historyStack.length <= 1;
+  elements.redoBtn.disabled = redoStack.length === 0;
+}
+
+async function applyHistorySnapshot(snapshot) {
+  isApplyingHistory = true;
+  const json = JSON.parse(snapshot);
+  canvas.discardActiveObject();
+  canvas.clear();
+  await new Promise((resolve) => {
+    canvas.loadFromJSON(json, () => {
+      canvas.backgroundColor = json.background || "#ffffff";
+      canvas.renderAll();
+      projectState[currentSide] = canvas.toJSON(["name"]);
+      updatePropertyPanel();
+      resolve();
+    });
+  });
+  isApplyingHistory = false;
+  updateHistoryButtons();
+}
+
+async function undo() {
+  if (historyStack.length <= 1) return;
+  const current = historyStack.pop();
+  redoStack.push(current);
+  await applyHistorySnapshot(historyStack[historyStack.length - 1]);
+}
+
+async function redo() {
+  if (redoStack.length === 0) return;
+  const snapshot = redoStack.pop();
+  historyStack.push(snapshot);
+  await applyHistorySnapshot(snapshot);
+}
+
+function resetHistory() {
+  historyStack = [];
+  redoStack = [];
+  pushHistory();
 }
 
 function getDefaultSide() {
@@ -104,7 +175,7 @@ function setSideButtons(side) {
 
 function loadSide(side) {
   if (side === currentSide && projectState[side]) return Promise.resolve();
-  captureCurrentSide();
+  captureCurrentSide({ skipHistory: true });
   currentSide = side;
   setSideButtons(side);
   isLoadingSide = true;
@@ -119,6 +190,7 @@ function loadSide(side) {
       canvas.renderAll();
       isLoadingSide = false;
       updatePropertyPanel();
+      resetHistory();
       resolve();
     });
   });
@@ -392,8 +464,30 @@ function deleteActiveObject() {
   updatePropertyPanel();
 }
 
-function saveToLocalStorage() {
+function alignActiveObject(mode) {
+  const activeObject = getActiveObject();
+  if (!activeObject) {
+    showAlert("warning", "整列する要素を選択してください。");
+    return;
+  }
+
+  activeObject.setCoords();
+  const rect = activeObject.getBoundingRect(true, true);
+
+  if (mode === "left") activeObject.left += -rect.left;
+  if (mode === "center") activeObject.left += CARD_WIDTH / 2 - (rect.left + rect.width / 2);
+  if (mode === "right") activeObject.left += CARD_WIDTH - (rect.left + rect.width);
+  if (mode === "top") activeObject.top += -rect.top;
+  if (mode === "middle") activeObject.top += CARD_HEIGHT / 2 - (rect.top + rect.height / 2);
+  if (mode === "bottom") activeObject.top += CARD_HEIGHT - (rect.top + rect.height);
+
+  activeObject.setCoords();
+  canvas.renderAll();
   captureCurrentSide();
+}
+
+function saveToLocalStorage() {
+  captureCurrentSide({ skipHistory: true });
   try {
     localStorage.setItem(PROJECT_KEY, JSON.stringify({
       app: "Card Studio",
@@ -413,6 +507,7 @@ function loadFromLocalStorage() {
     if (!raw) {
       createSimpleTemplate();
       projectState.back = getDefaultSide();
+      resetHistory();
       return;
     }
 
@@ -428,11 +523,12 @@ function loadFromLocalStorage() {
     showAlert("warning", `保存データを読み込めませんでした。${error.message}`);
     createSimpleTemplate();
     projectState.back = getDefaultSide();
+    resetHistory();
   }
 }
 
 function exportJson() {
-  captureCurrentSide();
+  captureCurrentSide({ skipHistory: true });
   const payload = {
     app: "Card Studio",
     version: "0.1.0",
@@ -480,16 +576,8 @@ function getCanvasSvg() {
   return canvas.toSVG();
 }
 
-async function getSidePng(side) {
-  const originalSide = currentSide;
-  await loadSide(side);
-  const dataUrl = getCanvasPngDataUrl();
-  await loadSide(originalSide);
-  return dataUrl;
-}
-
 async function previewProject() {
-  captureCurrentSide();
+  captureCurrentSide({ skipHistory: true });
   const originalSide = currentSide;
   await loadSide("front");
   elements.frontPreviewImage.src = getCanvasPngDataUrl();
@@ -511,7 +599,7 @@ function downloadSvg() {
 }
 
 async function downloadPdf() {
-  captureCurrentSide();
+  captureCurrentSide({ skipHistory: true });
   const originalSide = currentSide;
   try {
     await loadSide("front");
@@ -569,6 +657,59 @@ function downloadBlob(content, fileName, type) {
   URL.revokeObjectURL(url);
 }
 
+function handleSnap(event) {
+  if (!elements.snapToggle.checked) return;
+  const target = event.target;
+  if (!target) return;
+  target.set({
+    left: Math.round(target.left / SNAP_SIZE) * SNAP_SIZE,
+    top: Math.round(target.top / SNAP_SIZE) * SNAP_SIZE
+  });
+}
+
+function shouldIgnoreShortcut(event) {
+  const tag = document.activeElement?.tagName?.toLowerCase();
+  const isEditable = document.activeElement?.isContentEditable;
+  return isEditable || ["input", "textarea", "select"].includes(tag);
+}
+
+function bindKeyboardShortcuts() {
+  document.addEventListener("keydown", async (event) => {
+    const meta = event.metaKey || event.ctrlKey;
+
+    if (meta && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      saveToLocalStorage();
+      return;
+    }
+
+    if (meta && event.key.toLowerCase() === "z" && !event.shiftKey) {
+      event.preventDefault();
+      await undo();
+      return;
+    }
+
+    if ((meta && event.key.toLowerCase() === "y") || (meta && event.shiftKey && event.key.toLowerCase() === "z")) {
+      event.preventDefault();
+      await redo();
+      return;
+    }
+
+    if (meta && event.key.toLowerCase() === "d") {
+      event.preventDefault();
+      duplicateActiveObject();
+      return;
+    }
+
+    if (shouldIgnoreShortcut(event)) return;
+
+    if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      deleteActiveObject();
+    }
+  });
+}
+
 function bindEvents() {
   elements.blankTemplateBtn.addEventListener("click", createBlankTemplate);
   elements.simpleTemplateBtn.addEventListener("click", createSimpleTemplate);
@@ -584,6 +725,8 @@ function bindEvents() {
     elements.canvasWrapper.classList.toggle("grid-enabled", elements.gridToggle.checked);
   });
 
+  elements.undoBtn.addEventListener("click", undo);
+  elements.redoBtn.addEventListener("click", redo);
   elements.fontFamilyInput.addEventListener("change", () => setActiveProperty("fontFamily", elements.fontFamilyInput.value));
   elements.fontSizeInput.addEventListener("input", () => setActiveProperty("fontSize", Number(elements.fontSizeInput.value)));
   elements.fillColorInput.addEventListener("input", () => setActiveProperty("fill", elements.fillColorInput.value));
@@ -597,6 +740,13 @@ function bindEvents() {
     canvas.renderAll();
     captureCurrentSide();
   });
+
+  elements.alignLeftBtn.addEventListener("click", () => alignActiveObject("left"));
+  elements.alignCenterBtn.addEventListener("click", () => alignActiveObject("center"));
+  elements.alignRightBtn.addEventListener("click", () => alignActiveObject("right"));
+  elements.alignTopBtn.addEventListener("click", () => alignActiveObject("top"));
+  elements.alignMiddleBtn.addEventListener("click", () => alignActiveObject("middle"));
+  elements.alignBottomBtn.addEventListener("click", () => alignActiveObject("bottom"));
 
   elements.bringForwardBtn.addEventListener("click", () => {
     const activeObject = getActiveObject();
@@ -614,6 +764,22 @@ function bindEvents() {
     captureCurrentSide();
   });
 
+  elements.bringToFrontBtn.addEventListener("click", () => {
+    const activeObject = getActiveObject();
+    if (!activeObject) return;
+    canvas.bringToFront(activeObject);
+    canvas.renderAll();
+    captureCurrentSide();
+  });
+
+  elements.sendToBackBtn.addEventListener("click", () => {
+    const activeObject = getActiveObject();
+    if (!activeObject) return;
+    canvas.sendToBack(activeObject);
+    canvas.renderAll();
+    captureCurrentSide();
+  });
+
   elements.duplicateBtn.addEventListener("click", duplicateActiveObject);
   elements.deleteBtn.addEventListener("click", deleteActiveObject);
   elements.saveLocalBtn.addEventListener("click", saveToLocalStorage);
@@ -627,9 +793,13 @@ function bindEvents() {
   canvas.on("selection:created", updatePropertyPanel);
   canvas.on("selection:updated", updatePropertyPanel);
   canvas.on("selection:cleared", updatePropertyPanel);
+  canvas.on("object:moving", handleSnap);
   canvas.on("object:modified", captureCurrentSide);
   canvas.on("text:changed", captureCurrentSide);
+
+  bindKeyboardShortcuts();
 }
 
 bindEvents();
 loadFromLocalStorage();
+updateHistoryButtons();
