@@ -12,6 +12,8 @@
     <div class="container-fluid gap-2">
       <span class="navbar-brand fw-bold">Card Studio</span>
       <div class="d-flex flex-wrap gap-2 ms-auto">
+        <button id="undoBtn" class="btn btn-outline-secondary btn-sm">戻す</button>
+        <button id="redoBtn" class="btn btn-outline-secondary btn-sm">進む</button>
         <button id="saveLocalBtn" class="btn btn-primary btn-sm">ブラウザ保存</button>
         <button id="exportJsonBtn" class="btn btn-outline-primary btn-sm">JSON保存</button>
         <label class="btn btn-outline-primary btn-sm mb-0" for="importJsonInput">JSON読込</label>
@@ -75,6 +77,10 @@
           <input id="gridToggle" class="form-check-input" type="checkbox">
           <label class="form-check-label" for="gridToggle">グリッド</label>
         </div>
+        <div class="form-check form-switch ms-3">
+          <input id="snapToggle" class="form-check-input" type="checkbox" checked>
+          <label class="form-check-label" for="snapToggle">スナップ</label>
+        </div>
         <div class="small text-muted ms-auto">名刺サイズ比率 91mm × 55mm / 300dpi想定</div>
       </div>
       <div id="canvasWrapper" class="canvas-wrapper">
@@ -113,13 +119,41 @@
             <button id="underlineBtn" class="btn btn-outline-dark btn-sm">U</button>
           </div>
 
-          <div class="btn-group w-100 mt-3" role="group" aria-label="レイヤー操作">
+          <label class="form-label mt-3">整列</label>
+          <div class="btn-group w-100" role="group" aria-label="横整列">
+            <button id="alignLeftBtn" class="btn btn-outline-secondary btn-sm">左</button>
+            <button id="alignCenterBtn" class="btn btn-outline-secondary btn-sm">中央</button>
+            <button id="alignRightBtn" class="btn btn-outline-secondary btn-sm">右</button>
+          </div>
+          <div class="btn-group w-100 mt-2" role="group" aria-label="縦整列">
+            <button id="alignTopBtn" class="btn btn-outline-secondary btn-sm">上</button>
+            <button id="alignMiddleBtn" class="btn btn-outline-secondary btn-sm">中</button>
+            <button id="alignBottomBtn" class="btn btn-outline-secondary btn-sm">下</button>
+          </div>
+
+          <label class="form-label mt-3">レイヤー</label>
+          <div class="btn-group w-100" role="group" aria-label="レイヤー操作">
             <button id="bringForwardBtn" class="btn btn-outline-secondary btn-sm">前面</button>
             <button id="sendBackwardBtn" class="btn btn-outline-secondary btn-sm">背面</button>
+          </div>
+          <div class="btn-group w-100 mt-2" role="group" aria-label="最前面最背面">
+            <button id="bringToFrontBtn" class="btn btn-outline-secondary btn-sm">最前面</button>
+            <button id="sendToBackBtn" class="btn btn-outline-secondary btn-sm">最背面</button>
           </div>
 
           <button id="duplicateBtn" class="btn btn-outline-primary w-100 mt-3">複製</button>
           <button id="deleteBtn" class="btn btn-outline-danger w-100 mt-2">削除</button>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <h6 class="fw-bold">ショートカット</h6>
+        <div class="small text-muted">
+          <div>⌘/Ctrl + S：ブラウザ保存</div>
+          <div>⌘/Ctrl + Z：戻す</div>
+          <div>⌘/Ctrl + Y：進む</div>
+          <div>Delete / Backspace：削除</div>
+          <div>⌘/Ctrl + D：複製</div>
         </div>
       </section>
     </aside>
